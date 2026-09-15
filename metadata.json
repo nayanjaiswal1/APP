@@ -1,0 +1,6 @@
+{
+  "name": "SplitExpense AI",
+  "description": "Feature-rich expense splitting and smart message/SMS parser with categorized monthly expense PDF and CSV export, debt simplification, and group finances.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

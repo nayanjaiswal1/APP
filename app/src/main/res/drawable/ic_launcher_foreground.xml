@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Drop shadow -->
+    <path
+        android:pathData="M34,36 h40 a6,6 0 0,1 6,6 v32 a6,6 0 0,1 -6,6 h-40 a6,6 0 0,1 -6,-6 v-32 a6,6 0 0,1 6,-6 z"
+        android:fillColor="#40000000" />
+
+    <!-- Left Split Card (Mint Gradient) -->
+    <path
+        android:pathData="M32,32 L52,32 L47,74 L27,74 a5,5 0 0,1 -5,-5 L27,37 a5,5 0 0,1 5,-5 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="22"
+                android:startY="32"
+                android:endX="52"
+                android:endY="74"
+                android:type="linear">
+                <item android:color="#00E699" android:offset="0.0" />
+                <item android:color="#00B875" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Right Split Card (Cyan Indigo Gradient) -->
+    <path
+        android:pathData="M56,32 L76,32 a5,5 0 0,1 5,5 L86,69 a5,5 0 0,1 -5,5 L61,74 L56,32 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="56"
+                android:startY="32"
+                android:endX="86"
+                android:endY="74"
+                android:type="linear">
+                <item android:color="#38EF7D" android:offset="0.0" />
+                <item android:color="#11998E" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Dynamic Split Bolt / Equal Cut Sparkle -->
+    <path
+        android:pathData="M56,26 L48,50 L56,50 L52,78 L64,48 L56,48 Z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Small Sparkle / AI indicator -->
+    <path
+        android:pathData="M78,24 L80,29 L85,31 L80,33 L78,38 L76,33 L71,31 L76,29 Z"
+        android:fillColor="#FFD166" />
+</vector>
