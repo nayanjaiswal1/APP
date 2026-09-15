@@ -124,16 +124,16 @@ data class SplitExpenseUiState(
     val isParsingVoice: Boolean = false,
     val activeParsedVoiceResult: ParsedExpenseResult? = null,
     val voiceErrorMessage: String? = null,
-    val voiceSuccessToast: String? = null
+    val voiceSuccessToast: String? = null,
+    val isBackendSettingsOpen: Boolean = false
 )
 
 class SplitExpenseViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val repository: ExpenseRepository
-    init {
-        val db = AppDatabase.getDatabase(application, viewModelScope)
-        repository = ExpenseRepository(db)
-    }
+    val appDatabase: AppDatabase = AppDatabase.getDatabase(application, viewModelScope)
+    private val repository: ExpenseRepository = ExpenseRepository(appDatabase)
+    val clientManager: com.example.data.remote.FmsClientManager = com.example.data.remote.FmsClientManager.getInstance(application)
+    val syncManager: com.example.data.remote.FmsSyncManager = com.example.data.remote.FmsSyncManager(clientManager)
 
     private val _uiState = MutableStateFlow(SplitExpenseUiState())
     val uiState: StateFlow<SplitExpenseUiState> = _uiState.asStateFlow()
@@ -1045,6 +1045,9 @@ class SplitExpenseViewModel(application: Application) : AndroidViewModel(applica
 
     fun openSimplifyDebts() { _uiState.value = _uiState.value.copy(isSimplifyDebtsOpen = true) }
     fun closeSimplifyDebts() { _uiState.value = _uiState.value.copy(isSimplifyDebtsOpen = false) }
+
+    fun openBackendSettings() { _uiState.value = _uiState.value.copy(isBackendSettingsOpen = true) }
+    fun closeBackendSettings() { _uiState.value = _uiState.value.copy(isBackendSettingsOpen = false) }
 
     // ==========================================
     // 8. Voice-to-Text Gemini Expense Parsing

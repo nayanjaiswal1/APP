@@ -17,10 +17,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.material.icons.automirrored.filled.CallSplit
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -80,6 +89,12 @@ fun HomeScreen(
     onSimplifyDebtsClick: () -> Unit,
     onAddFriendClick: () -> Unit,
     onDeleteExpense: (Long) -> Unit,
+    onNavigateToBudgets: () -> Unit = {},
+    onNavigateToLendBorrow: () -> Unit = {},
+    onNavigateToReminders: () -> Unit = {},
+    onNavigateToInvestments: () -> Unit = {},
+    onNavigateToAiAdvisor: () -> Unit = {},
+    onNavigateToMoreHub: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val groupMap = groups.associateBy { it.id }
@@ -105,6 +120,69 @@ fun HomeScreen(
                 onSettleUpClick = { onSettleUpClick(null) },
                 onSimplifyDebtsClick = onSimplifyDebtsClick
             )
+        }
+
+        // Quick Feature Access Bar
+        item {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                item {
+                    QuickAccessChip(
+                        title = "Budgets",
+                        icon = Icons.Default.AccountBalanceWallet,
+                        color = PurplePrimary,
+                        testTag = "home_quick_budgets",
+                        onClick = onNavigateToBudgets
+                    )
+                }
+                item {
+                    QuickAccessChip(
+                        title = "Lend & Borrow",
+                        icon = Icons.AutoMirrored.Filled.CallSplit,
+                        color = PositiveGreen,
+                        testTag = "home_quick_lend_borrow",
+                        onClick = onNavigateToLendBorrow
+                    )
+                }
+                item {
+                    QuickAccessChip(
+                        title = "Bills & Alerts",
+                        icon = Icons.Default.NotificationsActive,
+                        color = Color(0xFFF57C00),
+                        testTag = "home_quick_reminders",
+                        onClick = onNavigateToReminders
+                    )
+                }
+                item {
+                    QuickAccessChip(
+                        title = "Investments",
+                        icon = Icons.Default.ShowChart,
+                        color = Color(0xFF2E7D32),
+                        testTag = "home_quick_investments",
+                        onClick = onNavigateToInvestments
+                    )
+                }
+                item {
+                    QuickAccessChip(
+                        title = "AI Advisor",
+                        icon = Icons.Default.AutoAwesome,
+                        color = PurplePrimaryDark,
+                        testTag = "home_quick_ai_advisor",
+                        onClick = onNavigateToAiAdvisor
+                    )
+                }
+                item {
+                    QuickAccessChip(
+                        title = "All Hub",
+                        icon = Icons.Default.Dashboard,
+                        color = Color(0xFF1976D2),
+                        testTag = "home_quick_hub",
+                        onClick = onNavigateToMoreHub
+                    )
+                }
+            }
         }
 
         // Friends & Balances Section Header
@@ -391,4 +469,51 @@ fun HomeScreen(
         )
     }
 }
+
+@Composable
+fun QuickAccessChip(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    color: androidx.compose.ui.graphics.Color,
+    testTag: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .clickable { onClick() }
+            .testTag(testTag)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = color.copy(alpha = 0.15f),
+                modifier = Modifier.size(26.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = color,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = title,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
 

@@ -32,6 +32,10 @@ val NegativeRedBgDark = Color(0xFF3B1E22)
 
 val SettledGray = Color(0xFF79747E)
 
+val WarningAmber = Color(0xFFD97706)
+val WarningAmberBg = Color(0xFFFEF3C7)
+val WarningAmberLight = Color(0xFFF59E0B)
+
 // Category Pastel Backgrounds & Tints
 val CatFoodBg = Color(0xFFFFD8E4)
 val CatFoodIcon = Color(0xFF904A60)

@@ -37,6 +37,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -44,14 +45,37 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.outlined.PieChart
+import androidx.compose.material.icons.automirrored.filled.CallSplit
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.ShowChart
 import com.example.ui.components.AddAccountDialog
 import com.example.ui.components.AddExpenseBottomSheet
 import com.example.ui.components.AddFriendDialog
@@ -63,10 +87,16 @@ import com.example.ui.components.UploadStatementDialog
 import com.example.ui.components.VoiceExpenseBottomSheet
 import com.example.ui.screens.AccountsScreen
 import com.example.ui.screens.ActivityScreen
+import com.example.ui.screens.AiAdvisorScreen
+import com.example.ui.screens.BudgetsScreen
 import com.example.ui.screens.CategoryExpenseScreen
 import com.example.ui.screens.GroupsScreen
 import com.example.ui.screens.HomeScreen
+import com.example.ui.screens.InvestmentsScreen
+import com.example.ui.screens.LendBorrowScreen
 import com.example.ui.screens.MessageParserScreen
+import com.example.ui.screens.RemindersScreen
+import com.example.ui.screens.ServicesHubScreen
 import com.example.ui.theme.PurpleContainer
 import com.example.ui.theme.PurplePrimary
 import com.example.ui.theme.PurplePrimaryDark
@@ -83,9 +113,17 @@ enum class NavigationTab(
 ) {
     HOME("Friends", Icons.Filled.Person, Icons.Outlined.Person, "nav_friends"),
     GROUPS("Groups", Icons.Filled.Group, Icons.Outlined.Group, "nav_groups"),
-    ACCOUNTS("Accounts", Icons.Filled.AccountBalance, Icons.Outlined.AccountBalance, "nav_accounts"),
+    HUB("Hub", Icons.Filled.Dashboard, Icons.Outlined.Dashboard, "nav_hub"),
     ANALYTICS("Analytics", Icons.Filled.PieChart, Icons.Outlined.PieChart, "nav_analytics"),
-    PARSER("Smart Parse", Icons.Filled.AutoAwesome, Icons.Outlined.AutoAwesome, "nav_parser")
+    PARSER("Smart Parse", Icons.Filled.AutoAwesome, Icons.Outlined.AutoAwesome, "nav_parser"),
+
+    // Sub-screens for complete backend API coverage
+    BUDGETS("Budgets", Icons.Filled.AccountBalanceWallet, Icons.Outlined.AccountBalanceWallet, "nav_budgets"),
+    LEND_BORROW("Lend & Borrow", Icons.AutoMirrored.Filled.CallSplit, Icons.AutoMirrored.Filled.CallSplit, "nav_lend_borrow"),
+    REMINDERS("Reminders", Icons.Filled.NotificationsActive, Icons.Outlined.NotificationsActive, "nav_reminders"),
+    INVESTMENTS("Investments", Icons.Filled.ShowChart, Icons.Outlined.ShowChart, "nav_investments"),
+    AI_ADVISOR("AI Advisor", Icons.Filled.AutoAwesome, Icons.Outlined.AutoAwesome, "nav_ai_advisor"),
+    ACCOUNTS("Accounts", Icons.Filled.AccountBalance, Icons.Outlined.AccountBalance, "nav_accounts")
 }
 
 class MainActivity : ComponentActivity() {
@@ -112,13 +150,97 @@ fun SplitExpenseApp(viewModel: SplitExpenseViewModel) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets.safeDrawing,
+        topBar = {
+            val backendStatus by viewModel.clientManager.status.collectAsState()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "SplitExpense AI",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = "Finance Management System",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextMuted
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = when (backendStatus.connectionState) {
+                        com.example.data.remote.FmsConnectionState.CONNECTED -> com.example.ui.theme.PositiveGreenBg
+                        com.example.data.remote.FmsConnectionState.ERROR -> com.example.ui.theme.NegativeRedBg
+                        else -> PurpleContainer
+                    },
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .clickable { viewModel.openBackendSettings() }
+                        .testTag("top_backend_status_button")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = when (backendStatus.connectionState) {
+                                com.example.data.remote.FmsConnectionState.CONNECTED -> Icons.Default.CloudDone
+                                com.example.data.remote.FmsConnectionState.ERROR -> Icons.Default.CloudOff
+                                else -> Icons.Default.Cloud
+                            },
+                            contentDescription = null,
+                            tint = when (backendStatus.connectionState) {
+                                com.example.data.remote.FmsConnectionState.CONNECTED -> com.example.ui.theme.PositiveGreen
+                                com.example.data.remote.FmsConnectionState.ERROR -> com.example.ui.theme.NegativeRed
+                                else -> PurplePrimary
+                            },
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (backendStatus.connectionState == com.example.data.remote.FmsConnectionState.CONNECTED) "FMS Sync" else "FMS Cloud",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = when (backendStatus.connectionState) {
+                                com.example.data.remote.FmsConnectionState.CONNECTED -> com.example.ui.theme.PositiveGreen
+                                com.example.data.remote.FmsConnectionState.ERROR -> com.example.ui.theme.NegativeRed
+                                else -> PurplePrimaryDark
+                            }
+                        )
+                    }
+                }
+            }
+        },
         bottomBar = {
+            val mainTabs = listOf(
+                NavigationTab.HOME,
+                NavigationTab.GROUPS,
+                NavigationTab.HUB,
+                NavigationTab.ANALYTICS,
+                NavigationTab.PARSER
+            )
             NavigationBar(
                 containerColor = MaterialTheme.colorScheme.surface,
                 tonalElevation = 2.dp
             ) {
-                NavigationTab.values().forEach { tab ->
-                    val isSelected = currentTab == tab
+                mainTabs.forEach { tab ->
+                    val isSelected = when (tab) {
+                        NavigationTab.HUB -> currentTab == NavigationTab.HUB ||
+                                currentTab == NavigationTab.BUDGETS ||
+                                currentTab == NavigationTab.LEND_BORROW ||
+                                currentTab == NavigationTab.REMINDERS ||
+                                currentTab == NavigationTab.INVESTMENTS ||
+                                currentTab == NavigationTab.AI_ADVISOR ||
+                                currentTab == NavigationTab.ACCOUNTS
+                        else -> currentTab == tab
+                    }
                     NavigationBarItem(
                         selected = isSelected,
                         onClick = { currentTab = tab },
@@ -149,7 +271,7 @@ fun SplitExpenseApp(viewModel: SplitExpenseViewModel) {
         },
         floatingActionButton = {
             AnimatedVisibility(
-                visible = currentTab != NavigationTab.PARSER,
+                visible = currentTab == NavigationTab.HOME || currentTab == NavigationTab.GROUPS,
                 enter = fadeIn() + slideInVertically { it / 2 },
                 exit = fadeOut() + slideOutVertically { it / 2 }
             ) {
@@ -192,7 +314,13 @@ fun SplitExpenseApp(viewModel: SplitExpenseViewModel) {
                         onSettleUpClick = { prefill -> viewModel.openSettleUp(prefill) },
                         onSimplifyDebtsClick = { viewModel.openSimplifyDebts() },
                         onAddFriendClick = { viewModel.openAddFriend() },
-                        onDeleteExpense = { id -> viewModel.deleteExpense(id) }
+                        onDeleteExpense = { id -> viewModel.deleteExpense(id) },
+                        onNavigateToBudgets = { currentTab = NavigationTab.BUDGETS },
+                        onNavigateToLendBorrow = { currentTab = NavigationTab.LEND_BORROW },
+                        onNavigateToReminders = { currentTab = NavigationTab.REMINDERS },
+                        onNavigateToInvestments = { currentTab = NavigationTab.INVESTMENTS },
+                        onNavigateToAiAdvisor = { currentTab = NavigationTab.AI_ADVISOR },
+                        onNavigateToMoreHub = { currentTab = NavigationTab.HUB }
                     )
                 }
                 NavigationTab.GROUPS -> {
@@ -208,6 +336,53 @@ fun SplitExpenseApp(viewModel: SplitExpenseViewModel) {
                         onAddExpenseInGroup = { viewModel.openAddExpense() },
                         onSimplifyGroupDebts = { viewModel.openSimplifyDebts() },
                         onDeleteExpense = { id -> viewModel.deleteExpense(id) }
+                    )
+                }
+                NavigationTab.HUB -> {
+                    ServicesHubScreen(
+                        clientManager = viewModel.clientManager,
+                        onNavigateToBudgets = { currentTab = NavigationTab.BUDGETS },
+                        onNavigateToLendBorrow = { currentTab = NavigationTab.LEND_BORROW },
+                        onNavigateToReminders = { currentTab = NavigationTab.REMINDERS },
+                        onNavigateToInvestments = { currentTab = NavigationTab.INVESTMENTS },
+                        onNavigateToAiAdvisor = { currentTab = NavigationTab.AI_ADVISOR },
+                        onNavigateToAccounts = { currentTab = NavigationTab.ACCOUNTS },
+                        onNavigateToAnalytics = { currentTab = NavigationTab.ANALYTICS },
+                        onNavigateToParser = { currentTab = NavigationTab.PARSER },
+                        onOpenBackendSettings = { viewModel.openBackendSettings() },
+                        onOpenSimplifyDebts = { viewModel.openSimplifyDebts() }
+                    )
+                }
+                NavigationTab.BUDGETS -> {
+                    BudgetsScreen(
+                        expenses = uiState.expenses,
+                        clientManager = viewModel.clientManager,
+                        onBack = { currentTab = NavigationTab.HUB }
+                    )
+                }
+                NavigationTab.LEND_BORROW -> {
+                    LendBorrowScreen(
+                        clientManager = viewModel.clientManager,
+                        onBack = { currentTab = NavigationTab.HUB }
+                    )
+                }
+                NavigationTab.REMINDERS -> {
+                    RemindersScreen(
+                        clientManager = viewModel.clientManager,
+                        onBack = { currentTab = NavigationTab.HUB }
+                    )
+                }
+                NavigationTab.INVESTMENTS -> {
+                    InvestmentsScreen(
+                        clientManager = viewModel.clientManager,
+                        onBack = { currentTab = NavigationTab.HUB }
+                    )
+                }
+                NavigationTab.AI_ADVISOR -> {
+                    AiAdvisorScreen(
+                        expenses = uiState.expenses,
+                        clientManager = viewModel.clientManager,
+                        onBack = { currentTab = NavigationTab.HUB }
                     )
                 }
                 NavigationTab.ACCOUNTS -> {
@@ -396,6 +571,15 @@ fun SplitExpenseApp(viewModel: SplitExpenseViewModel) {
                 viewModel.openAddExpense(result)
             },
             onDismiss = { viewModel.closeVoiceExpense() }
+        )
+    }
+
+    if (uiState.isBackendSettingsOpen) {
+        com.example.ui.components.FmsBackendDialog(
+            clientManager = viewModel.clientManager,
+            syncManager = viewModel.syncManager,
+            database = viewModel.appDatabase,
+            onDismiss = { viewModel.closeBackendSettings() }
         )
     }
 
