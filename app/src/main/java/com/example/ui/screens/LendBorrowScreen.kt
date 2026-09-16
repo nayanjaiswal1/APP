@@ -57,15 +57,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import android.widget.Toast
+import com.example.data.remote.FmsApiResult
 import com.example.data.remote.FmsClientManager
 import com.example.data.remote.dto.CreateLendBorrowDto
 import com.example.data.remote.dto.LendBorrowResponseDto
 import com.example.data.remote.dto.RecordPaymentDto
+import com.example.ui.components.BackendStatusBanner
 import com.example.ui.theme.NegativeRed
 import com.example.ui.theme.NegativeRedBg
 import com.example.ui.theme.PositiveGreen
@@ -89,6 +93,7 @@ fun LendBorrowScreen(
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
     var itemsList by remember {
         mutableStateOf<List<LendBorrowResponseDto>>(
             listOf(
@@ -135,14 +140,11 @@ fun LendBorrowScreen(
 
     // Load from remote backend
     LaunchedEffect(Unit) {
-        val service = clientManager.getService()
-        if (service != null) {
-            try {
-                val res = service.getLendBorrow()
-                if (res.isSuccessful && res.body() != null && res.body()!!.isNotEmpty()) {
-                    itemsList = res.body()!!
-                }
-            } catch (_: Exception) { }
+        val res = clientManager.executeSafely("Fetch Lend & Borrow") { service ->
+            service.getLendBorrow()
+        }
+        if (res is FmsApiResult.Success && res.data.isNotEmpty()) {
+            itemsList = res.data
         }
     }
 
@@ -199,6 +201,23 @@ fun LendBorrowScreen(
                         )
                     }
                 }
+            }
+
+            // Backend Status Banner
+            item {
+                BackendStatusBanner(
+                    clientManager = clientManager,
+                    onResolveConflict = { conflict, action ->
+                        if (action == com.example.ui.components.ConflictResolutionAction.USE_SERVER_VERSION) {
+                            coroutineScope.launch {
+                                val res = clientManager.executeSafely("Refresh Lend & Borrow") { it.getLendBorrow() }
+                                if (res is FmsApiResult.Success) {
+                                    itemsList = res.data
+                                }
+                            }
+                        }
+                    }
+                )
             }
 
             // Summary Card
@@ -500,8 +519,8 @@ fun LendBorrowScreen(
                 itemsList = listOf(newItem) + itemsList
                 isAddDialogOpen = false
                 coroutineScope.launch {
-                    try {
-                        clientManager.getService()?.createLendBorrow(
+                    val res = clientManager.executeSafely("Create Lend/Borrow ($person)") { service ->
+                        service.createLendBorrow(
                             CreateLendBorrowDto(
                                 type = type,
                                 personName = person,
@@ -511,7 +530,25 @@ fun LendBorrowScreen(
                                 description = desc
                             )
                         )
-                    } catch (_: Exception) { }
+                    }
+                    when (res) {
+                        is FmsApiResult.Success -> {
+                            Toast.makeText(context, "Record for $person saved & synced to cloud.", Toast.LENGTH_SHORT).show()
+                        }
+                        is FmsApiResult.Conflict -> {
+                            Toast.makeText(context, "Conflict: Duplicate record detected on server for $person.", Toast.LENGTH_LONG).show()
+                        }
+                        is FmsApiResult.Unreachable -> {
+                            val msg = if (res.isRenderColdStart) "Saved locally! (Render server waking up...)" else "Saved locally! (Backend unreachable)"
+                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                        }
+                        is FmsApiResult.Unauthorized -> {
+                            Toast.makeText(context, "Saved locally. Sign in to sync with cloud backend.", Toast.LENGTH_LONG).show()
+                        }
+                        else -> {
+                            Toast.makeText(context, "Record for $person saved to device.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             }
         )
@@ -529,12 +566,24 @@ fun LendBorrowScreen(
                 }
                 paymentDialogItem = null
                 coroutineScope.launch {
-                    try {
-                        clientManager.getService()?.recordLendBorrowPayment(
+                    val payRes = clientManager.executeSafely("Record Payment (${targetItem.personName})") { service ->
+                        service.recordLendBorrowPayment(
                             targetItem.id,
                             RecordPaymentDto(amount = paid)
                         )
-                    } catch (_: Exception) { }
+                    }
+                    when (payRes) {
+                        is FmsApiResult.Success -> {
+                            Toast.makeText(context, "Payment of $$paid synced to cloud.", Toast.LENGTH_SHORT).show()
+                        }
+                        is FmsApiResult.Conflict -> {
+                            Toast.makeText(context, "Conflict: Payment state conflict on server.", Toast.LENGTH_LONG).show()
+                        }
+                        is FmsApiResult.Unreachable -> {
+                            Toast.makeText(context, "Payment recorded locally (Backend offline).", Toast.LENGTH_SHORT).show()
+                        }
+                        else -> {}
+                    }
                 }
             }
         )

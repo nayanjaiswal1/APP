@@ -592,11 +592,14 @@ fun AddExpenseBottomSheet(
             Spacer(modifier = Modifier.height(16.dp))
 
             // Save Button
+            val isAmountValid = totalAmount.isFinite() && totalAmount > 0.0 && totalAmount <= 1_000_000_000.0
+            val isTitleValid = title.isNotBlank() && title.trim().length <= 120
+
             Button(
                 onClick = {
-                    if (title.isNotBlank() && totalAmount > 0) {
+                    if (isTitleValid && isAmountValid) {
                         onSaveExpense(
-                            title,
+                            title.trim().take(120),
                             totalAmount,
                             currency,
                             category,
@@ -604,7 +607,7 @@ fun AddExpenseBottomSheet(
                             payerId,
                             splitMode.name,
                             computedSplits,
-                            notes.ifBlank { null },
+                            notes.trim().take(1000).ifBlank { null },
                             prefill?.rawMessage
                         )
                     }
@@ -614,7 +617,7 @@ fun AddExpenseBottomSheet(
                     .testTag("save_expense_button"),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = PurplePrimary),
-                enabled = title.isNotBlank() && totalAmount > 0 && isBalanced && activeMemberIds.isNotEmpty()
+                enabled = isTitleValid && isAmountValid && isBalanced && activeMemberIds.isNotEmpty()
             ) {
                 Text(
                     text = "Save Expense ($currency${String.format(Locale.US, "%.2f", totalAmount)})",

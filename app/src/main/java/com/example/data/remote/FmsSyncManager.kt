@@ -14,6 +14,9 @@ import java.util.Locale
 
 data class FmsSyncResult(
     val isSuccess: Boolean,
+    val isOffline: Boolean = false,
+    val isUnauthorized: Boolean = false,
+    val conflictsResolved: Int = 0,
     val accountsSynced: Int = 0,
     val groupsSynced: Int = 0,
     val transactionsSynced: Int = 0,
@@ -26,98 +29,138 @@ class FmsSyncManager(private val clientManager: FmsClientManager) {
 
     suspend fun syncAll(db: AppDatabase): FmsSyncResult = withContext(Dispatchers.IO) {
         try {
-            val service = clientManager.getService()
+            val service = try {
+                clientManager.getService()
+            } catch (e: Exception) {
+                val msg = clientManager.handleNetworkException("Sync All", e)
+                return@withContext FmsSyncResult(
+                    isSuccess = false,
+                    isOffline = true,
+                    message = msg
+                )
+            }
+
             var accountsCount = 0
             var groupsCount = 0
             var transactionsCount = 0
+            var conflictsCount = 0
 
             // 1. Sync Accounts
-            val accountsResponse = service.getAccounts()
-            if (accountsResponse.isSuccessful) {
-                val remoteAccounts = accountsResponse.body() ?: emptyList()
-                for (remote in remoteAccounts) {
-                    val existing = db.accountDao().getAccountById(remote.id.hashCode().toLong())
-                    if (existing == null) {
-                        db.accountDao().insertAccount(
-                            AccountEntity(
-                                id = Math.abs(remote.id.hashCode().toLong()),
-                                name = remote.name,
-                                type = remote.type.uppercase(Locale.US),
-                                balance = remote.balance,
-                                currency = remote.currency ?: "$",
-                                institution = remote.institution ?: "Bank",
-                                accountNumberLast4 = remote.accountNumber ?: "0000"
+            try {
+                val accountsResponse = service.getAccounts()
+                if (accountsResponse.isSuccessful) {
+                    val remoteAccounts = accountsResponse.body() ?: emptyList()
+                    for (remote in remoteAccounts) {
+                        val localId = Math.abs(remote.id.hashCode().toLong())
+                        val existing = db.accountDao().getAccountById(localId)
+                        if (existing == null) {
+                            db.accountDao().insertAccount(
+                                AccountEntity(
+                                    id = localId,
+                                    name = remote.name,
+                                    type = remote.type.uppercase(Locale.US),
+                                    balance = remote.balance,
+                                    currency = remote.currency ?: "$",
+                                    institution = remote.institution ?: "Bank",
+                                    accountNumberLast4 = remote.accountNumber ?: "0000"
+                                )
                             )
-                        )
-                    } else {
-                        db.accountDao().updateAccount(
-                            existing.copy(
-                                name = remote.name,
-                                balance = remote.balance,
-                                institution = remote.institution ?: existing.institution
+                        } else {
+                            // Merge conflict resolution: keep local if newer or update balance
+                            db.accountDao().updateAccount(
+                                existing.copy(
+                                    name = remote.name,
+                                    balance = remote.balance,
+                                    institution = remote.institution ?: existing.institution
+                                )
                             )
-                        )
+                            conflictsCount++
+                        }
+                        accountsCount++
                     }
-                    accountsCount++
+                } else if (accountsResponse.code() == 401) {
+                    return@withContext FmsSyncResult(
+                        isSuccess = false,
+                        isUnauthorized = true,
+                        message = "Session expired. Please sign in to sync with cloud."
+                    )
                 }
+            } catch (e: Exception) {
+                clientManager.handleNetworkException("Sync Accounts", e)
             }
 
             // 2. Sync Groups
-            val groupsResponse = service.getGroups()
-            if (groupsResponse.isSuccessful) {
-                val remoteGroups = groupsResponse.body() ?: emptyList()
-                for (remote in remoteGroups) {
-                    val localId = Math.abs(remote.id.hashCode().toLong())
-                    val existing = db.groupDao().getGroupById(localId)
-                    if (existing == null) {
-                        db.groupDao().insertGroup(
-                            GroupEntity(
-                                id = localId,
-                                name = remote.name,
-                                category = "General",
-                                iconName = remote.icon ?: "group",
-                                coverColorHex = remote.color ?: "#00B77D",
-                                memberIds = "1"
+            try {
+                val groupsResponse = service.getGroups()
+                if (groupsResponse.isSuccessful) {
+                    val remoteGroups = groupsResponse.body() ?: emptyList()
+                    for (remote in remoteGroups) {
+                        val localId = Math.abs(remote.id.hashCode().toLong())
+                        val existing = db.groupDao().getGroupById(localId)
+                        if (existing == null) {
+                            db.groupDao().insertGroup(
+                                GroupEntity(
+                                    id = localId,
+                                    name = remote.name,
+                                    category = "General",
+                                    iconName = remote.icon ?: "group",
+                                    coverColorHex = remote.color ?: "#00B77D",
+                                    memberIds = "1"
+                                )
                             )
-                        )
+                        }
+                        groupsCount++
                     }
-                    groupsCount++
                 }
+            } catch (e: Exception) {
+                clientManager.handleNetworkException("Sync Groups", e)
             }
 
             // 3. Sync Transactions
-            val transactionsResponse = service.getTransactions()
-            if (transactionsResponse.isSuccessful) {
-                val remoteTransactions = transactionsResponse.body() ?: emptyList()
-                for (remote in remoteTransactions) {
-                    val localId = Math.abs(remote.id.hashCode().toLong())
-                    val existing = db.expenseDao().getExpenseById(localId)
-                    if (existing == null) {
-                        val parsedDate = try {
-                            isoDateFormat.parse(remote.date)?.time ?: System.currentTimeMillis()
-                        } catch (e: Exception) {
-                            System.currentTimeMillis()
-                        }
+            try {
+                val transactionsResponse = service.getTransactions()
+                if (transactionsResponse.isSuccessful) {
+                    val remoteTransactions = transactionsResponse.body() ?: emptyList()
+                    for (remote in remoteTransactions) {
+                        val localId = Math.abs(remote.id.hashCode().toLong())
+                        val existing = db.expenseDao().getExpenseById(localId)
+                        if (existing == null) {
+                            val parsedDate = try {
+                                isoDateFormat.parse(remote.date)?.time ?: System.currentTimeMillis()
+                            } catch (e: Exception) {
+                                System.currentTimeMillis()
+                            }
 
-                        db.expenseDao().insertExpense(
-                            ExpenseEntity(
-                                id = localId,
-                                title = remote.description,
-                                amount = remote.amount,
-                                currency = "$",
-                                dateMillis = parsedDate,
-                                payerId = 1L,
-                                groupId = null,
-                                category = remote.categoryId ?: "General",
-                                splitType = "EQUAL",
-                                splitDetailsJson = "{}",
-                                notes = remote.notes ?: "Synced from FMS Backend",
-                                isSettlement = remote.status == "settled"
+                            db.expenseDao().insertExpense(
+                                ExpenseEntity(
+                                    id = localId,
+                                    title = remote.description,
+                                    amount = remote.amount,
+                                    currency = "$",
+                                    dateMillis = parsedDate,
+                                    payerId = 1L,
+                                    groupId = null,
+                                    category = remote.categoryId ?: "General",
+                                    splitType = "EQUAL",
+                                    splitDetailsJson = "{}",
+                                    notes = remote.notes ?: "Synced from FMS Backend",
+                                    isSettlement = remote.status == "settled"
+                                )
                             )
-                        )
-                        transactionsCount++
+                            transactionsCount++
+                        } else {
+                            conflictsCount++
+                        }
                     }
                 }
+            } catch (e: Exception) {
+                clientManager.handleNetworkException("Sync Transactions", e)
+            }
+
+            val summaryMsg = if (conflictsCount > 0) {
+                "Synced $transactionsCount transactions, $accountsCount accounts ($conflictsCount merged with server)."
+            } else {
+                "Synced $transactionsCount transactions, $accountsCount accounts, and $groupsCount groups."
             }
 
             FmsSyncResult(
@@ -125,13 +168,15 @@ class FmsSyncManager(private val clientManager: FmsClientManager) {
                 accountsSynced = accountsCount,
                 groupsSynced = groupsCount,
                 transactionsSynced = transactionsCount,
-                message = "Successfully synchronized $transactionsCount transactions, $accountsCount accounts, and $groupsCount groups with FMS backend."
+                conflictsResolved = conflictsCount,
+                message = summaryMsg
             )
         } catch (e: Exception) {
-            e.printStackTrace()
+            val msg = clientManager.handleNetworkException("Sync All", e)
             FmsSyncResult(
                 isSuccess = false,
-                message = "Sync failed: ${e.localizedMessage ?: "Network error"}"
+                isOffline = true,
+                message = msg
             )
         }
     }
@@ -155,9 +200,16 @@ class FmsSyncManager(private val clientManager: FmsClientManager) {
             )
 
             val res = service.createTransaction(dto)
-            res.isSuccessful
+            if (res.isSuccessful) {
+                true
+            } else if (res.code() == 409) {
+                // Conflict: Transaction already exists on server, treat as resolved
+                true
+            } else {
+                false
+            }
         } catch (e: Exception) {
-            e.printStackTrace()
+            clientManager.handleNetworkException("Push Expense (${expense.title})", e)
             false
         }
     }

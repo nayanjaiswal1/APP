@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -53,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -60,9 +62,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.data.local.entity.ExpenseEntity
+import com.example.data.remote.ConflictInfo
+import com.example.data.remote.FmsApiResult
 import com.example.data.remote.FmsClientManager
 import com.example.data.remote.dto.BudgetResponseDto
 import com.example.data.remote.dto.CreateBudgetDto
+import com.example.ui.components.BackendStatusBanner
 import com.example.ui.components.CategoryIcon
 import com.example.ui.components.getCategoryVisual
 import com.example.ui.theme.NegativeRed
@@ -88,6 +93,7 @@ fun BudgetsScreen(
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
     var budgets by remember {
         mutableStateOf<List<BudgetResponseDto>>(
             listOf(
@@ -141,14 +147,11 @@ fun BudgetsScreen(
 
     // Fetch from remote backend if connected
     LaunchedEffect(Unit) {
-        val service = clientManager.getService()
-        if (service != null) {
-            try {
-                val res = service.getBudgets()
-                if (res.isSuccessful && res.body() != null && res.body()!!.isNotEmpty()) {
-                    budgets = res.body()!!
-                }
-            } catch (_: Exception) { }
+        val result = clientManager.executeSafely("Fetch Budgets") { service ->
+            service.getBudgets()
+        }
+        if (result is FmsApiResult.Success && result.data.isNotEmpty()) {
+            budgets = result.data
         }
     }
 
@@ -197,6 +200,24 @@ fun BudgetsScreen(
                         )
                     }
                 }
+            }
+
+            // Universal Backend Status Banner (Handles Offline, Render spin-up, Conflicts, and 401)
+            item {
+                BackendStatusBanner(
+                    clientManager = clientManager,
+                    onResolveConflict = { conflict, action ->
+                        // Re-fetch or keep local based on user choice
+                        if (action == com.example.ui.components.ConflictResolutionAction.USE_SERVER_VERSION) {
+                            coroutineScope.launch {
+                                val res = clientManager.executeSafely("Refresh Budgets") { it.getBudgets() }
+                                if (res is FmsApiResult.Success) {
+                                    budgets = res.data
+                                }
+                            }
+                        }
+                    }
+                )
             }
 
             // Overview Card
@@ -515,9 +536,8 @@ fun BudgetsScreen(
                 budgets = listOf(newBudget) + budgets
                 isAddDialogOpen = false
                 coroutineScope.launch {
-                    try {
-                        val service = clientManager.getService()
-                        service?.createBudget(
+                    val result = clientManager.executeSafely("Create Budget ($category)") { service ->
+                        service.createBudget(
                             CreateBudgetDto(
                                 category = category,
                                 amount = amount,
@@ -526,7 +546,29 @@ fun BudgetsScreen(
                                 alertThresholdPercentage = threshold
                             )
                         )
-                    } catch (_: Exception) { }
+                    }
+                    when (result) {
+                        is FmsApiResult.Success -> {
+                            Toast.makeText(context, "Budget '$category' synced to cloud.", Toast.LENGTH_SHORT).show()
+                        }
+                        is FmsApiResult.Conflict -> {
+                            Toast.makeText(context, "Conflict: Budget already exists on cloud for '$category'. Showing resolution options.", Toast.LENGTH_LONG).show()
+                        }
+                        is FmsApiResult.Unreachable -> {
+                            val notice = if (result.isRenderColdStart) {
+                                "Budget '$category' saved locally! (Render server is starting up...)"
+                            } else {
+                                "Budget '$category' saved locally! (Backend unreachable)"
+                            }
+                            Toast.makeText(context, notice, Toast.LENGTH_LONG).show()
+                        }
+                        is FmsApiResult.Unauthorized -> {
+                            Toast.makeText(context, "Saved locally. Sign in to sync with cloud backend.", Toast.LENGTH_LONG).show()
+                        }
+                        else -> {
+                            Toast.makeText(context, "Budget '$category' saved.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             }
         )

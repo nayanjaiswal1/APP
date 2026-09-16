@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -52,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -59,9 +61,11 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.data.remote.FmsApiResult
 import com.example.data.remote.FmsClientManager
 import com.example.data.remote.dto.CreateReminderDto
 import com.example.data.remote.dto.ReminderResponseDto
+import com.example.ui.components.BackendStatusBanner
 import com.example.ui.components.CategoryIcon
 import com.example.ui.theme.NegativeRed
 import com.example.ui.theme.NegativeRedBg
@@ -84,6 +88,7 @@ fun RemindersScreen(
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
     var remindersList by remember {
         mutableStateOf<List<ReminderResponseDto>>(
             listOf(
@@ -136,14 +141,11 @@ fun RemindersScreen(
 
     // Fetch from backend
     LaunchedEffect(Unit) {
-        val service = clientManager.getService()
-        if (service != null) {
-            try {
-                val res = service.getReminders()
-                if (res.isSuccessful && res.body() != null && res.body()!!.isNotEmpty()) {
-                    remindersList = res.body()!!
-                }
-            } catch (_: Exception) { }
+        val res = clientManager.executeSafely("Fetch Reminders") { service ->
+            service.getReminders()
+        }
+        if (res is FmsApiResult.Success && res.data.isNotEmpty()) {
+            remindersList = res.data
         }
     }
 
@@ -194,6 +196,23 @@ fun RemindersScreen(
                         )
                     }
                 }
+            }
+
+            // Backend Status Banner
+            item {
+                BackendStatusBanner(
+                    clientManager = clientManager,
+                    onResolveConflict = { conflict, action ->
+                        if (action == com.example.ui.components.ConflictResolutionAction.USE_SERVER_VERSION) {
+                            coroutineScope.launch {
+                                val res = clientManager.executeSafely("Refresh Reminders") { it.getReminders() }
+                                if (res is FmsApiResult.Success) {
+                                    remindersList = res.data
+                                }
+                            }
+                        }
+                    }
+                )
             }
 
             // Summary Card
@@ -352,9 +371,9 @@ fun RemindersScreen(
                                 onClick = {
                                     remindersList = remindersList.filterNot { it.id == item.id }
                                     coroutineScope.launch {
-                                        try {
-                                            clientManager.getService()?.deleteReminder(item.id)
-                                        } catch (_: Exception) { }
+                                        clientManager.executeSafely("Delete Reminder (${item.title})") { service ->
+                                            service.deleteReminder(item.id)
+                                        }
                                     }
                                 },
                                 modifier = Modifier.size(36.dp)
@@ -369,9 +388,12 @@ fun RemindersScreen(
                                             if (it.id == item.id) it.copy(isCompleted = true) else it
                                         }
                                         coroutineScope.launch {
-                                            try {
-                                                clientManager.getService()?.completeReminder(item.id)
-                                            } catch (_: Exception) { }
+                                            val completeRes = clientManager.executeSafely("Complete Reminder (${item.title})") { service ->
+                                                service.completeReminder(item.id)
+                                            }
+                                            if (completeRes is FmsApiResult.Success) {
+                                                Toast.makeText(context, "${item.title} marked paid on cloud", Toast.LENGTH_SHORT).show()
+                                            }
                                         }
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = PositiveGreen),
@@ -423,8 +445,8 @@ fun RemindersScreen(
                 remindersList = listOf(newItem) + remindersList
                 isAddDialogOpen = false
                 coroutineScope.launch {
-                    try {
-                        clientManager.getService()?.createReminder(
+                    val addRes = clientManager.executeSafely("Create Reminder ($title)") { service ->
+                        service.createReminder(
                             CreateReminderDto(
                                 title = title,
                                 amount = amount,
@@ -434,7 +456,25 @@ fun RemindersScreen(
                                 notes = notes
                             )
                         )
-                    } catch (_: Exception) { }
+                    }
+                    when (addRes) {
+                        is FmsApiResult.Success -> {
+                            Toast.makeText(context, "Reminder '$title' synced to cloud.", Toast.LENGTH_SHORT).show()
+                        }
+                        is FmsApiResult.Conflict -> {
+                            Toast.makeText(context, "Conflict: Bill reminder already exists for '$title'.", Toast.LENGTH_LONG).show()
+                        }
+                        is FmsApiResult.Unreachable -> {
+                            val msg = if (addRes.isRenderColdStart) "Saved locally! (Render server waking up...)" else "Saved locally! (Backend unreachable)"
+                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                        }
+                        is FmsApiResult.Unauthorized -> {
+                            Toast.makeText(context, "Saved locally. Sign in to sync with cloud backend.", Toast.LENGTH_LONG).show()
+                        }
+                        else -> {
+                            Toast.makeText(context, "Reminder saved to device.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             }
         )

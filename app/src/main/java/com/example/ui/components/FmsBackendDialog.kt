@@ -192,7 +192,9 @@ fun FmsBackendDialog(
                 colors = CardDefaults.cardColors(
                     containerColor = when (status.connectionState) {
                         FmsConnectionState.CONNECTED -> PositiveGreenBg
-                        FmsConnectionState.ERROR -> NegativeRedBg
+                        FmsConnectionState.WAKING_UP -> com.example.ui.theme.WarningAmberBg
+                        FmsConnectionState.CONFLICT -> com.example.ui.theme.WarningAmberBg
+                        FmsConnectionState.ERROR, FmsConnectionState.UNREACHABLE, FmsConnectionState.SESSION_EXPIRED -> NegativeRedBg
                         else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                     }
                 ),
@@ -200,7 +202,8 @@ fun FmsBackendDialog(
                     1.dp,
                     when (status.connectionState) {
                         FmsConnectionState.CONNECTED -> PositiveGreen.copy(alpha = 0.4f)
-                        FmsConnectionState.ERROR -> NegativeRed.copy(alpha = 0.4f)
+                        FmsConnectionState.WAKING_UP, FmsConnectionState.CONFLICT -> com.example.ui.theme.WarningAmber.copy(alpha = 0.4f)
+                        FmsConnectionState.ERROR, FmsConnectionState.UNREACHABLE, FmsConnectionState.SESSION_EXPIRED -> NegativeRed.copy(alpha = 0.4f)
                         else -> MaterialTheme.colorScheme.surfaceVariant
                     }
                 ),
@@ -218,13 +221,18 @@ fun FmsBackendDialog(
                             text = when (status.connectionState) {
                                 FmsConnectionState.CONNECTED -> "Backend Connected"
                                 FmsConnectionState.CHECKING -> "Checking Status..."
+                                FmsConnectionState.WAKING_UP -> "⚡ Cloud Server Waking Up (~30s)"
+                                FmsConnectionState.CONFLICT -> "⚠️ Data Conflict Detected (409)"
+                                FmsConnectionState.UNREACHABLE -> "Cloud Server Unreachable (Offline)"
+                                FmsConnectionState.SESSION_EXPIRED -> "🔒 Session Expired (401)"
                                 FmsConnectionState.ERROR -> "Connection Failed"
                                 FmsConnectionState.DISCONNECTED -> "Offline / Not Connected"
                             },
                             fontWeight = FontWeight.Bold,
                             color = when (status.connectionState) {
                                 FmsConnectionState.CONNECTED -> PositiveGreen
-                                FmsConnectionState.ERROR -> NegativeRed
+                                FmsConnectionState.WAKING_UP, FmsConnectionState.CONFLICT -> com.example.ui.theme.WarningAmber
+                                FmsConnectionState.ERROR, FmsConnectionState.UNREACHABLE, FmsConnectionState.SESSION_EXPIRED -> NegativeRed
                                 else -> MaterialTheme.colorScheme.onSurface
                             },
                             fontSize = 14.sp
@@ -292,8 +300,12 @@ fun FmsBackendDialog(
                     if (inputUrl != status.baseUrl) {
                         Button(
                             onClick = {
-                                clientManager.updateBaseUrl(inputUrl)
-                                Toast.makeText(context, "Updated Base URL", Toast.LENGTH_SHORT).show()
+                                val success = clientManager.updateBaseUrl(inputUrl)
+                                if (success) {
+                                    Toast.makeText(context, "Base URL updated securely", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Invalid or insecure URL. Remote hosts must use HTTPS.", Toast.LENGTH_LONG).show()
+                                }
                             },
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = PurplePrimary),

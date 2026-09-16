@@ -47,6 +47,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -59,9 +61,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.data.remote.FmsApiResult
 import com.example.data.remote.FmsClientManager
 import com.example.data.remote.dto.CreateInvestmentDto
 import com.example.data.remote.dto.InvestmentResponseDto
+import com.example.ui.components.BackendStatusBanner
 import com.example.ui.theme.NegativeRed
 import com.example.ui.theme.NegativeRedBg
 import com.example.ui.theme.PositiveGreen
@@ -81,6 +85,7 @@ fun InvestmentsScreen(
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
     var investmentsList by remember {
         mutableStateOf<List<InvestmentResponseDto>>(
             listOf(
@@ -141,14 +146,11 @@ fun InvestmentsScreen(
 
     // Fetch from backend
     LaunchedEffect(Unit) {
-        val service = clientManager.getService()
-        if (service != null) {
-            try {
-                val res = service.getInvestments()
-                if (res.isSuccessful && res.body() != null && res.body()!!.isNotEmpty()) {
-                    investmentsList = res.body()!!
-                }
-            } catch (_: Exception) { }
+        val res = clientManager.executeSafely("Fetch Investments") { service ->
+            service.getInvestments()
+        }
+        if (res is FmsApiResult.Success && res.data.isNotEmpty()) {
+            investmentsList = res.data
         }
     }
 
@@ -197,6 +199,23 @@ fun InvestmentsScreen(
                         )
                     }
                 }
+            }
+
+            // Backend Status Banner
+            item {
+                BackendStatusBanner(
+                    clientManager = clientManager,
+                    onResolveConflict = { conflict, action ->
+                        if (action == com.example.ui.components.ConflictResolutionAction.USE_SERVER_VERSION) {
+                            coroutineScope.launch {
+                                val res = clientManager.executeSafely("Refresh Investments") { it.getInvestments() }
+                                if (res is FmsApiResult.Success) {
+                                    investmentsList = res.data
+                                }
+                            }
+                        }
+                    }
+                )
             }
 
             // Portfolio Net Worth Card
@@ -354,9 +373,9 @@ fun InvestmentsScreen(
                                 onClick = {
                                     investmentsList = investmentsList.filterNot { it.id == item.id }
                                     coroutineScope.launch {
-                                        try {
-                                            clientManager.getService()?.deleteInvestment(item.id)
-                                        } catch (_: Exception) { }
+                                        clientManager.executeSafely("Delete Investment (${item.name})") { service ->
+                                            service.deleteInvestment(item.id)
+                                        }
                                     }
                                 },
                                 modifier = Modifier.size(32.dp)
@@ -435,8 +454,8 @@ fun InvestmentsScreen(
                 investmentsList = listOf(newItem) + investmentsList
                 isAddDialogOpen = false
                 coroutineScope.launch {
-                    try {
-                        clientManager.getService()?.createInvestment(
+                    val addRes = clientManager.executeSafely("Create Investment ($name)") { service ->
+                        service.createInvestment(
                             CreateInvestmentDto(
                                 name = name,
                                 type = type,
@@ -446,7 +465,25 @@ fun InvestmentsScreen(
                                 institution = institution
                             )
                         )
-                    } catch (_: Exception) { }
+                    }
+                    when (addRes) {
+                        is FmsApiResult.Success -> {
+                            Toast.makeText(context, "Investment '$name' synced to cloud.", Toast.LENGTH_SHORT).show()
+                        }
+                        is FmsApiResult.Conflict -> {
+                            Toast.makeText(context, "Conflict: Asset '$name' already exists in portfolio.", Toast.LENGTH_LONG).show()
+                        }
+                        is FmsApiResult.Unreachable -> {
+                            val msg = if (addRes.isRenderColdStart) "Saved locally! (Render server waking up...)" else "Saved locally! (Backend unreachable)"
+                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                        }
+                        is FmsApiResult.Unauthorized -> {
+                            Toast.makeText(context, "Saved locally. Sign in to sync with cloud backend.", Toast.LENGTH_LONG).show()
+                        }
+                        else -> {
+                            Toast.makeText(context, "Asset saved to device.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             }
         )

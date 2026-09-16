@@ -80,6 +80,7 @@ import com.example.ui.components.AddAccountDialog
 import com.example.ui.components.AddExpenseBottomSheet
 import com.example.ui.components.AddFriendDialog
 import com.example.ui.components.AddGroupDialog
+import com.example.ui.components.BackendStatusBanner
 import com.example.ui.components.DebtSimplificationDialog
 import com.example.ui.components.InvoiceDetailDialog
 import com.example.ui.components.SettleUpBottomSheet
@@ -175,9 +176,11 @@ fun SplitExpenseApp(viewModel: SplitExpenseViewModel) {
 
                 Surface(
                     shape = RoundedCornerShape(20.dp),
-                    color = when (backendStatus.connectionState) {
-                        com.example.data.remote.FmsConnectionState.CONNECTED -> com.example.ui.theme.PositiveGreenBg
-                        com.example.data.remote.FmsConnectionState.ERROR -> com.example.ui.theme.NegativeRedBg
+                    color = when {
+                        backendStatus.hasConflict -> com.example.ui.theme.NegativeRedBg
+                        backendStatus.connectionState == com.example.data.remote.FmsConnectionState.CONNECTED -> com.example.ui.theme.PositiveGreenBg
+                        backendStatus.connectionState == com.example.data.remote.FmsConnectionState.WAKING_UP -> com.example.ui.theme.WarningAmberBg
+                        backendStatus.connectionState == com.example.data.remote.FmsConnectionState.ERROR -> com.example.ui.theme.NegativeRedBg
                         else -> PurpleContainer
                     },
                     modifier = Modifier
@@ -190,27 +193,41 @@ fun SplitExpenseApp(viewModel: SplitExpenseViewModel) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = when (backendStatus.connectionState) {
-                                com.example.data.remote.FmsConnectionState.CONNECTED -> Icons.Default.CloudDone
-                                com.example.data.remote.FmsConnectionState.ERROR -> Icons.Default.CloudOff
+                            imageVector = when {
+                                backendStatus.hasConflict -> Icons.Default.CloudOff
+                                backendStatus.connectionState == com.example.data.remote.FmsConnectionState.CONNECTED -> Icons.Default.CloudDone
+                                backendStatus.connectionState == com.example.data.remote.FmsConnectionState.WAKING_UP -> Icons.Default.Cloud
+                                backendStatus.connectionState == com.example.data.remote.FmsConnectionState.ERROR -> Icons.Default.CloudOff
                                 else -> Icons.Default.Cloud
                             },
                             contentDescription = null,
-                            tint = when (backendStatus.connectionState) {
-                                com.example.data.remote.FmsConnectionState.CONNECTED -> com.example.ui.theme.PositiveGreen
-                                com.example.data.remote.FmsConnectionState.ERROR -> com.example.ui.theme.NegativeRed
+                            tint = when {
+                                backendStatus.hasConflict -> com.example.ui.theme.NegativeRed
+                                backendStatus.connectionState == com.example.data.remote.FmsConnectionState.CONNECTED -> com.example.ui.theme.PositiveGreen
+                                backendStatus.connectionState == com.example.data.remote.FmsConnectionState.WAKING_UP -> com.example.ui.theme.WarningAmber
+                                backendStatus.connectionState == com.example.data.remote.FmsConnectionState.ERROR -> com.example.ui.theme.NegativeRed
                                 else -> PurplePrimary
                             },
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (backendStatus.connectionState == com.example.data.remote.FmsConnectionState.CONNECTED) "FMS Sync" else "FMS Cloud",
+                            text = when {
+                                backendStatus.hasConflict -> "409 Conflict"
+                                backendStatus.connectionState == com.example.data.remote.FmsConnectionState.CONNECTED -> "FMS Sync"
+                                backendStatus.connectionState == com.example.data.remote.FmsConnectionState.WAKING_UP -> "Waking Up..."
+                                backendStatus.connectionState == com.example.data.remote.FmsConnectionState.ERROR ||
+                                backendStatus.connectionState == com.example.data.remote.FmsConnectionState.UNREACHABLE -> "Offline"
+                                backendStatus.connectionState == com.example.data.remote.FmsConnectionState.CHECKING -> "Connecting..."
+                                else -> "FMS Cloud"
+                            },
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = when (backendStatus.connectionState) {
-                                com.example.data.remote.FmsConnectionState.CONNECTED -> com.example.ui.theme.PositiveGreen
-                                com.example.data.remote.FmsConnectionState.ERROR -> com.example.ui.theme.NegativeRed
+                            color = when {
+                                backendStatus.hasConflict -> com.example.ui.theme.NegativeRed
+                                backendStatus.connectionState == com.example.data.remote.FmsConnectionState.CONNECTED -> com.example.ui.theme.PositiveGreen
+                                backendStatus.connectionState == com.example.data.remote.FmsConnectionState.WAKING_UP -> com.example.ui.theme.WarningAmber
+                                backendStatus.connectionState == com.example.data.remote.FmsConnectionState.ERROR -> com.example.ui.theme.NegativeRed
                                 else -> PurplePrimaryDark
                             }
                         )
@@ -292,12 +309,33 @@ fun SplitExpenseApp(viewModel: SplitExpenseViewModel) {
             }
         }
     ) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            when (currentTab) {
+            val showGlobalBanner = currentTab == NavigationTab.HOME ||
+                    currentTab == NavigationTab.GROUPS ||
+                    currentTab == NavigationTab.HUB ||
+                    currentTab == NavigationTab.ANALYTICS ||
+                    currentTab == NavigationTab.PARSER
+
+            if (showGlobalBanner) {
+                BackendStatusBanner(
+                    clientManager = viewModel.clientManager,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    onResolveConflict = { _, _ ->
+                        viewModel.syncWithBackend()
+                    }
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                when (currentTab) {
                 NavigationTab.HOME -> {
                     HomeScreen(
                         users = uiState.users,
@@ -453,6 +491,7 @@ fun SplitExpenseApp(viewModel: SplitExpenseViewModel) {
                     )
                 }
             }
+        }
         }
     }
 

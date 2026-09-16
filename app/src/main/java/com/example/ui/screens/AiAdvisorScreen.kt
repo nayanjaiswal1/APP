@@ -53,8 +53,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.entity.ExpenseEntity
+import com.example.data.remote.FmsApiResult
 import com.example.data.remote.FmsClientManager
 import com.example.data.remote.dto.SendMessageDto
+import com.example.ui.components.BackendStatusBanner
 import com.example.ui.theme.PositiveGreen
 import com.example.ui.theme.PurpleContainer
 import com.example.ui.theme.PurplePrimary
@@ -113,18 +115,16 @@ fun AiAdvisorScreen(
 
         coroutineScope.launch {
             try {
-                val service = clientManager.getService()
                 var answer: String? = null
-                if (service != null) {
-                    try {
-                        val response = service.sendChatMessage(SendMessageDto(message = query))
-                        if (response.isSuccessful && response.body()?.response != null) {
-                            answer = response.body()?.response
-                        }
-                    } catch (_: Exception) { }
+                val result = clientManager.executeSafely("Ask AI Advisor") { service ->
+                    service.sendChatMessage(SendMessageDto(message = query))
                 }
 
-                // Fallback smart analysis if remote service didn't answer
+                if (result is FmsApiResult.Success && !result.data.response.isNullOrBlank()) {
+                    answer = result.data.response
+                }
+
+                // Fallback smart analysis if remote service didn't answer or is offline
                 if (answer == null) {
                     val totalSpend = expenses.filter { !it.isSettlement }.sumOf { it.amount }
                     val categoryGroup = expenses.filter { !it.isSettlement }
@@ -136,7 +136,7 @@ fun AiAdvisorScreen(
                     val topCategory = categoryGroup.firstOrNull()?.first ?: "Food & Dining"
                     val topCatAmount = categoryGroup.firstOrNull()?.second ?: 0.0
 
-                    answer = when {
+                    val baseInsight = when {
                         query.contains("spending", ignoreCase = true) || query.contains("expense", ignoreCase = true) -> {
                             "Based on your recorded transactions, your total spend is $${String.format(Locale.US, "%.2f", totalSpend)}. Your largest spending category is **$topCategory** at $${String.format(Locale.US, "%.2f", topCatAmount)}. Keeping track of smaller daily payments will yield the most immediate savings."
                         }
@@ -152,6 +152,22 @@ fun AiAdvisorScreen(
                             "I reviewed your portfolio and ledger: you have ${expenses.size} tracked transactions totaling $${String.format(Locale.US, "%.2f", totalSpend)}. Maintaining steady cash reserves while investing surplus in diversified index funds is currently recommended."
                         }
                     }
+
+                    val offlinePrefix = when (result) {
+                        is FmsApiResult.Unreachable -> {
+                            if (result.isRenderColdStart)
+                                "⚡ *[Render Cloud Server is waking up (~30s cold start). Using On-Device Financial Intelligence]:*\n\n"
+                            else
+                                "📡 *[Cloud Server Unreachable — Using On-Device Financial Intelligence]:*\n\n"
+                        }
+                        is FmsApiResult.Unauthorized ->
+                            "🔒 *[Session Expired or Unauthorized — Using On-Device Financial Intelligence]:*\n\n"
+                        is FmsApiResult.ServerError ->
+                            "⚠️ *[Cloud Server Error — Using On-Device Financial Intelligence]:*\n\n"
+                        else -> ""
+                    }
+
+                    answer = offlinePrefix + baseInsight
                 }
 
                 messages = messages + ChatMessage(isUser = false, text = answer)
@@ -246,6 +262,12 @@ fun AiAdvisorScreen(
                 }
             }
         }
+
+        // Backend Status Banner
+        BackendStatusBanner(
+            clientManager = clientManager,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+        )
 
         // Suggestions row
         LazyRow(

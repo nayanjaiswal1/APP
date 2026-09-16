@@ -141,7 +141,8 @@ object InvoiceParserAndTranslator {
 
             val requestBody = requestJson.toString().toRequestBody("application/json".toMediaType())
             val request = Request.Builder()
-                .url("$BASE_URL?key=$apiKey")
+                .url(BASE_URL)
+                .addHeader("x-goog-api-key", apiKey)
                 .post(requestBody)
                 .build()
 

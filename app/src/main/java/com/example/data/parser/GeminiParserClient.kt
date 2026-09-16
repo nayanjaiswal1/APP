@@ -84,7 +84,8 @@ object GeminiParserClient {
 
             val requestBody = requestJson.toString().toRequestBody("application/json".toMediaType())
             val request = Request.Builder()
-                .url("$BASE_URL?key=$apiKey")
+                .url(BASE_URL)
+                .addHeader("x-goog-api-key", apiKey)
                 .post(requestBody)
                 .build()
 
@@ -96,7 +97,6 @@ object GeminiParserClient {
             val responseBody = response.body?.string() ?: return@withContext null
             parseJsonResponse(responseBody, rawMessage)
         } catch (e: Exception) {
-            e.printStackTrace()
             null
         }
     }
@@ -145,7 +145,8 @@ object GeminiParserClient {
 
             val requestBody = requestJson.toString().toRequestBody("application/json".toMediaType())
             val request = Request.Builder()
-                .url("$BASE_URL?key=$apiKey")
+                .url(BASE_URL)
+                .addHeader("x-goog-api-key", apiKey)
                 .post(requestBody)
                 .build()
 
@@ -157,7 +158,6 @@ object GeminiParserClient {
             val responseBody = response.body?.string() ?: return@withContext null
             parseJsonResponse(responseBody, spokenTranscript)
         } catch (e: Exception) {
-            e.printStackTrace()
             null
         }
     }

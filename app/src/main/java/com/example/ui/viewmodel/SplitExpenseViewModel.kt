@@ -1049,6 +1049,12 @@ class SplitExpenseViewModel(application: Application) : AndroidViewModel(applica
     fun openBackendSettings() { _uiState.value = _uiState.value.copy(isBackendSettingsOpen = true) }
     fun closeBackendSettings() { _uiState.value = _uiState.value.copy(isBackendSettingsOpen = false) }
 
+    fun syncWithBackend() {
+        viewModelScope.launch {
+            syncManager.syncAll(appDatabase)
+        }
+    }
+
     // ==========================================
     // 8. Voice-to-Text Gemini Expense Parsing
     // ==========================================
